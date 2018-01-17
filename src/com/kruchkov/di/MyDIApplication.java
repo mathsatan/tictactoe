@@ -1,6 +1,9 @@
 package com.kruchkov.di;
 
 import com.kruchkov.ai.Robot;
+import com.kruchkov.ai.Result;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -11,11 +14,16 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
-public class MyDIApplication extends JPanel implements FieldGui {
-	private int cellWidth = 20;
-	private int cellHeight = 20;
+public class MyDIApplication extends FieldGui {
+	private int cellWidth = 30;
+	private int cellHeight = 30;
 	private Field model = null;
 	private Robot robot = null;
+
+	private static final Logger log = Logger.getLogger(MyDIApplication.class);
+	static {
+		PropertyConfigurator.configure("log4j.properties");
+	}
 
 	private static BufferedImage imageHuman = null;
 	private static BufferedImage imageAi = null;
@@ -23,14 +31,28 @@ public class MyDIApplication extends JPanel implements FieldGui {
 	private int rows = 10;
 	private int cols = 10;
 
+
+	private Point p1 = null;
+	private Point p2 = null;
+
+	private GuiFunction gui = null;
+	private interface GuiFunction {
+		void func(Graphics g);
+	}
+
 	public boolean setCell(int i, int j, Byte value) {
 		if (value == null || i >= rows || j >= cols || i < 0 || j < 0) {
+			log.warn("Cell setter fails with invalid arguments");
 			return false;
 		}
-		if (model.set(i, j, value)) {
-			return true;
-		}
-		return false;
+		return model.set(i, j, value);
+	}
+
+	protected void startNewGame() {
+		this.model.reset();
+		this.p1 = this.p2 = null;
+		this.repaint();
+		log.info("New game started");
 	}
 
 	public MyDIApplication(final Field f, final Robot r) {
@@ -45,26 +67,37 @@ public class MyDIApplication extends JPanel implements FieldGui {
 		this.setBackground(Color.WHITE);
 
 		try {
-			imageHuman = ImageIO.read(new File("C:\\Users\\soulf\\IdeaProjects\\di\\res\\image\\player_1.png"));
-			imageAi = ImageIO.read(new File("C:\\Users\\soulf\\IdeaProjects\\di\\res\\image\\player_ai.png"));
+			imageHuman = ImageIO.read(new File("res/image/player_1.png"));
+			imageAi = ImageIO.read(new File("res/image/player_ai.png"));
 		} catch (IOException e) {
-			System.out.println("Image not found! Exception: " + e.getMessage());
+			log.error("Image not found! Exception: " + e.getMessage());
 			System.exit(0);
 		}
 	}
 
-
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
-		updateMatrix(g);
-		if (p1 != null && p2 != null) {
-			g.setColor(Color.red);
-			g.drawLine((int) p1.getX(), (int) p1.getY(), (int) p2.getX(), (int) p2.getY());
+
+		this.updateMatrix.func(g);
+
+		if (gui != null) {
+			gui.func(g);
+			gui = null;
 		}
 	}
+	private GuiFunction drawWinnerLine = (Graphics g) -> {
+		if (p1 != null && p2 != null) {
+			g.setColor(Color.red);
+			Graphics2D g2 = (Graphics2D) g;
+			g2.setStroke(new BasicStroke(3));
+			g2.drawLine((int) p1.getX(), (int) p1.getY(), (int) p2.getX(), (int) p2.getY());
+			g2.setStroke(new BasicStroke(1));
+			g.setColor(Color.black);
+		}
+	};
 
-	private void updateMatrix(Graphics g) {
+	private GuiFunction updateMatrix = (Graphics g) -> {
 		for (int i = 0; i < rows - 1; ++i) {
 			g.drawLine(0, i*cellHeight + cellHeight, getWidth(), i*cellHeight + cellHeight);
 		}
@@ -76,49 +109,58 @@ public class MyDIApplication extends JPanel implements FieldGui {
 			for (int j = 0; j < model.cols(); ++j) {
 				Byte item = model.get(i, j);
 				if (item == null) {
-					System.out.println("Null cell in [i, j]");
+					log.error("Null cell in [i, j]");
 					System.exit(0);
 				}
+
 				if (item.intValue() == 1) {
-					g.drawImage(imageAi, i * cellWidth + 2, j*cellHeight + 2, this);
+					g.drawImage(imageAi, i * cellWidth + (cellWidth - imageAi.getWidth()) / 2, j * cellHeight + (cellHeight - imageAi.getHeight()) / 2, MyDIApplication.this);
 				} else {
 					if (item.intValue() == 2) {
-						g.drawImage(imageHuman, i * cellWidth + 2, j*cellHeight + 2, this);
+						g.drawImage(imageHuman, i * cellWidth + (cellWidth - imageHuman.getWidth()) / 2, j * cellHeight + (cellHeight - imageHuman.getHeight()) / 2, MyDIApplication.this);
 					}
 				}
 			}
 		}
-	}
+	};
 
-	private Point p1 = null;
-	private Point p2 = null;
-	private void drawWinnerLine(TickPoint a, TickPoint b) {
+	private void drawWinnerLine(TicPoint a, TicPoint b) {
 		if (a == null || b == null) {
 			return;
 		}
-		p1 = new Point(a.getX() * (cellWidth - 1) + cellWidth / 2, a.getY() * (cellHeight - 1) + cellHeight / 2);
-		p2 = new Point(b.getX() * (cellWidth - 1) + cellWidth / 2, b.getY() * (cellHeight - 1) + cellHeight / 2);
-		repaint();
+		p1 = new Point(a.getX() * cellWidth + cellWidth / 2, a.getY() * cellHeight + cellHeight / 2);
+		p2 = new Point(b.getX() * cellWidth + cellWidth / 2, b.getY() * cellHeight + cellHeight / 2);
+		this.gui = this.drawWinnerLine;
+		this.repaint();
 	}
-	private void gameOver(Player winner) {
-		if (winner == null) {
+
+	private void gameOver(Result result) {
+		if (result == null) {
 			return;
 		}
-		String msg = null;
+
+		Player winner = result.getPlayer();
+
+		String msg = "";
 		switch (winner.ordinal()) {
 			case 1: msg = "Robot wins!"; break;
 			case 2: msg = "You win!"; break;
 			case 3: msg = "Draw!"; break;
 			default: msg = "Something went wrong :o";
 		}
+		if (winner.ordinal() == 1 || winner.ordinal() == 2) {
+			drawWinnerLine(result.getArrPoint(0), result.getArrPoint(4));
+		}
 		try {
 			JOptionPane.showMessageDialog(this, msg);
+			startNewGame();
 		} catch (HeadlessException e) {
-			System.out.println(e.getMessage());
+			log.error(e.getMessage());
 		}
 	}
 
 	private class MyMouse extends MouseAdapter {
+
 		@Override
 		public void mouseClicked(MouseEvent e) {
 			int c = (int) Math.floor(e.getX() / cellHeight);
@@ -126,34 +168,38 @@ public class MyDIApplication extends JPanel implements FieldGui {
 
 			Byte item = model.get(c, r);
 			if (item == null) {
-				System.out.println("Null value in [" + c + "][" + r + "]");
+				log.error("Null value in [" + c + "][" + r + "]");
 				System.exit(0);
 			}
 			if (item.intValue() == 0) {
 				if (setCell(c, r, (byte) 2)) {
 					repaint();
 
-					Player winner = robot.isSomeoneWin();
+					Result res = robot.isSomeoneWin();
+					Player winner = res.getPlayer();
+
 					if (winner == Player.DRAW) {
-						gameOver(winner);
+						gameOver(res);
 						return;
 					}
 					if (winner == Player.NONE) {
-						TickPoint robotMove = robot.makeAMove();
+						TicPoint robotMove = robot.makeAMove();
 						if (robotMove == null) {
-							System.out.println("Robot can not make a move");
+							log.error("Robot can not make a move");
 							System.exit(0);
 						}
 
 						if (setCell(robotMove.getX(), robotMove.getY(), (byte) 1)) {
 							repaint();
 						}
-						winner = robot.isSomeoneWin();
+						res = robot.isSomeoneWin();
+						winner = res.getPlayer();
+
 						if (winner == Player.DRAW || winner != Player.NONE) {
-							gameOver(winner);
+							gameOver(res);
 						}
 					} else {
-						gameOver(winner);
+						gameOver(res);
 					}
 				}
 			}

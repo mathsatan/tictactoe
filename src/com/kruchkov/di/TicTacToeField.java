@@ -1,5 +1,8 @@
 package com.kruchkov.di;
 
+import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
+
 import java.util.Arrays;
 
 public class TicTacToeField implements Field {
@@ -7,10 +10,12 @@ public class TicTacToeField implements Field {
 	private Byte[][] matrix = null;
 	private int rowCount;
 	private int colCount;
+	private static final Logger log = Logger.getLogger(TicTacToeField.class);
+
 	public TicTacToeField(int n, int m) {
-		if (n < 6 || m < 6) {
-			System.out.println("Wrong size! Generated matrix[6x6]");
-			//matrix = new byte[6][6];
+		PropertyConfigurator.configure("log4j.properties");
+		if (n < 10 || m < 10) {
+			log.warn("Wrong size! Generated matrix[10x10]");
 			rowCount = 10;
 			colCount = 10;
 		} else {
@@ -22,6 +27,18 @@ public class TicTacToeField implements Field {
 		for (Byte[] row: matrix) {
 			Arrays.fill(row, (byte) 0);
 		}
+		/*matrix = new Byte[][]{
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,1,1,1,0,1,1,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0},
+				{0,0,0,2,0,2,0,0,0,0},
+				{0,0,0,0,2,0,0,0,0,0},
+				{0,0,0,0,0,0,0,0,0,0}
+		};*/
 	}
 	public int rows() {
 		return rowCount;
@@ -34,10 +51,12 @@ public class TicTacToeField implements Field {
 		if (i < rowCount && j < colCount) {
 			return matrix[i][j];
 		}
+		log.warn("Trying to get by wrong index");
 		return null;
 	}
 	public boolean set(int i, int j, Byte element) {
 		if (element == null) {
+			log.warn("Trying to set null value");
 			return false;
 		}
 		if (i < rowCount && j < colCount) {
@@ -48,26 +67,36 @@ public class TicTacToeField implements Field {
 			}
 
 		}
+
+		log.warn("Setter fails with indexes: [" + i + "][" + j + "] and value: " + element);
 		return false;
 	}
 
-	public boolean set(TickPoint p, Byte element) {
-		if (p == null) {
+	public boolean set(TicPoint p, Byte element) {
+		if (p == null || element == null) {
+			log.warn("Trying to set null value or null point");
 			return false;
 		}
 		return set(p.getX(), p.getY(), element);
 	}
 
 	public boolean isEmptyCell() {
-		return emptyCellCount < rowCount * colCount;
+		return emptyCellCount <= rowCount * colCount;
+	}
+
+	public void reset() {
+		for (Byte[] row: matrix) {
+			Arrays.fill(row, (byte) 0);
+		}
+		emptyCellCount = 0;
 	}
 
 	@Override
 	public String toString() {
-		String str = "";
+		StringBuilder str = new StringBuilder();
 		for (int i = 0; i < rowCount; ++i) {
-			str += Arrays.toString(matrix[i]) + "\n";
+			str.append(matrix[i]).append("\n");
 		}
-		return str;
+		return str.toString();
 	}
 }
